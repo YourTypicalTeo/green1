@@ -1,4 +1,3 @@
-// In: com.greenride.repository.UserRepository.java
 package com.greenride.repository;
 
 import com.greenride.model.User;
@@ -7,4 +6,7 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
+    // Added for security checks
+    boolean existsByEmail(String email);
+    boolean existsByUsername(String username);
 }
