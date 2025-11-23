@@ -7,8 +7,10 @@ import com.greenride.repository.BookingRepository;
 import com.greenride.repository.RideRepository;
 import com.greenride.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -23,18 +25,32 @@ public class BookingService {
 
     @Transactional
     public void bookRide(Long rideId, String passengerUsername) {
-        Ride ride = rideRepository.findById(rideId)
-                .orElseThrow(() -> new RuntimeException("Ride not found"));
-
+        // Fast fail: Check user existence
         User passenger = userRepository.findByUsername(passengerUsername)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
+        // Fast fail: Check ride existence
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found"));
+
+        // Rule: Driver cannot book their own ride
         if (ride.getDriver().getId().equals(passenger.getId())) {
-            throw new RuntimeException("Driver cannot book their own ride.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Drivers cannot book their own ride.");
         }
 
-        if (ride.getAvailableSeats() <= 0) {
-            throw new RuntimeException("No seats available for this ride!");
+        // Rule: Prevent duplicate bookings
+        boolean alreadyBooked = ride.getBookings().stream()
+                .anyMatch(b -> b.getPassenger().getId().equals(passenger.getId())
+                        && !"CANCELLED".equals(b.getStatus()));
+        if (alreadyBooked) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You have already booked this ride.");
+        }
+
+        // ATOMIC DECREMENT: The core concurrency fix
+        // If this returns 0, it means another thread took the last seat milliseconds ago.
+        int updatedRows = rideRepository.decrementAvailableSeats(rideId);
+        if (updatedRows == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ride is fully booked!");
         }
 
         Booking booking = new Booking();
@@ -44,9 +60,6 @@ public class BookingService {
         booking.setStatus("CONFIRMED");
 
         bookingRepository.save(booking);
-
-        ride.setAvailableSeats(ride.getAvailableSeats() - 1);
-        rideRepository.save(ride);
     }
 
     public List<Booking> getMyBookings(String username) {
@@ -56,29 +69,29 @@ public class BookingService {
     @Transactional
     public void cancelBooking(Long bookingId, String username) {
         Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new RuntimeException("Booking not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Booking not found"));
 
+        // Security check: Ensure the user cancelling is actually the one who booked
         if (!booking.getPassenger().getUsername().equals(username)) {
-            throw new RuntimeException("You are not authorized to cancel this booking.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not authorized to cancel this booking.");
         }
 
         if ("CANCELLED".equals(booking.getStatus())) {
-            throw new RuntimeException("Booking is already cancelled.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Booking is already cancelled.");
         }
 
+        // Rule: 10 Minute Cutoff
         LocalDateTime departureTime = booking.getRide().getDepartureTime();
-        LocalDateTime now = LocalDateTime.now();
-        long minutesUntilDeparture = Duration.between(now, departureTime).toMinutes();
+        long minutesUntilDeparture = Duration.between(LocalDateTime.now(), departureTime).toMinutes();
 
         if (minutesUntilDeparture < 10) {
-            throw new RuntimeException("Cannot cancel within 10 minutes of departure.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot cancel within 10 minutes of departure.");
         }
 
         booking.setStatus("CANCELLED");
         bookingRepository.save(booking);
 
-        Ride ride = booking.getRide();
-        ride.setAvailableSeats(ride.getAvailableSeats() + 1);
-        rideRepository.save(ride);
+        // Atomic Increment to restore seat
+        rideRepository.incrementAvailableSeats(booking.getRide().getId());
     }
 }

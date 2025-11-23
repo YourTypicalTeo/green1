@@ -21,7 +21,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User Not Found with username: " + username));
 
-        // Use our new CustomUserDetails instead of the default Spring User
+        // CHANGE: Return our custom class
         return new CustomUserDetails(user);
     }
 }
