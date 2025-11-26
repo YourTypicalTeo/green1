@@ -1,26 +1,37 @@
 package com.greenride.greenride_service;
-
+import com.greenride.model.Role;
+import com.greenride.repository.RoleRepository;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
-import org.springframework.web.client.RestTemplate;
 
 @SpringBootApplication
-@ComponentScan(basePackages = "com.greenride")
-@EnableJpaRepositories(basePackages = "com.greenride.repository")
-@EntityScan(basePackages = "com.greenride.model")
 public class GreenrideServiceApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(GreenrideServiceApplication.class, args);
-	}
+    public static void main(String[] args) {
+        SpringApplication.run(GreenrideServiceApplication.class, args);
+    }
 
-	// Register RestTemplate Bean for External API calls
-	@Bean
-	public RestTemplate restTemplate() {
-		return new RestTemplate();
-	}
+    // This runs automatically every time the server starts
+    @Bean
+    public CommandLineRunner init(RoleRepository roleRepository) {
+        return args -> {
+            // Check if ROLE_USER exists; if not, create it to fix the 500 Error
+            if (roleRepository.findByName("ROLE_USER").isEmpty()) {
+                Role userRole = new Role();
+                userRole.setName("ROLE_USER");
+                roleRepository.save(userRole);
+                System.out.println("✅ SYSTEM: Created ROLE_USER in database.");
+            }
+
+            // Check if ROLE_ADMIN exists; if not, create it (good for future use)
+            if (roleRepository.findByName("ROLE_ADMIN").isEmpty()) {
+                Role adminRole = new Role();
+                adminRole.setName("ROLE_ADMIN");
+                roleRepository.save(adminRole);
+                System.out.println("✅ SYSTEM: Created ROLE_ADMIN in database.");
+            }
+        };
+    }
 }
