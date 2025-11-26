@@ -19,15 +19,23 @@
                     <label class="form-label">Username</label>
                     <input type="text" th:field="*{username}" class="form-control" required>
                 </div>
+
                 <div class="mb-3">
                     <label class="form-label">Email</label>
                     <input type="email" th:field="*{email}" class="form-control" required>
-                    <div class="form-text">Must be a valid email format.</div>
                 </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Phone Number (with country code)</label>
+                    <input type="tel" th:field="*{phoneNumber}" class="form-control" placeholder="+306912345678" required>
+                    <div class="form-text">We will send a welcome SMS to this number.</div>
+                </div>
+
                 <div class="mb-3">
                     <label class="form-label">Password</label>
                     <input type="password" th:field="*{password}" class="form-control" required>
                 </div>
+
                 <button type="submit" class="btn btn-primary w-100">Register</button>
             </form>
 

@@ -25,8 +25,8 @@ public class WebRegistrationController {
         if (AuthUtils.isAuthenticated(authentication)) {
             return "redirect:/";
         }
-        // Add empty DTO to model for Thymeleaf binding
-        model.addAttribute("registerRequest", new RegisterRequest("", "", ""));
+        // Initialize DTO with 4 empty strings (username, email, password, phone)
+        model.addAttribute("registerRequest", new RegisterRequest("", "", "", ""));
         return "register";
     }
 
@@ -42,9 +42,8 @@ public class WebRegistrationController {
 
         try {
             userService.registerUser(registerRequest);
-            return "redirect:/login?success"; // Redirect to login on success
+            return "redirect:/login?success";
         } catch (Exception e) {
-            // On error, reload the page with the error message and the form data
             model.addAttribute("error", e.getMessage());
             model.addAttribute("registerRequest", registerRequest);
             return "register";

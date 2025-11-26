@@ -20,12 +20,17 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SmsService smsService;
 
     @Autowired
-    public UserServiceImpl(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(UserRepository userRepository,
+                           RoleRepository roleRepository,
+                           PasswordEncoder passwordEncoder,
+                           SmsService smsService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.smsService = smsService;
     }
 
     @Override
@@ -33,15 +38,10 @@ public class UserServiceImpl implements UserService {
     public User registerUser(RegisterRequest registerRequest) {
         if (registerRequest == null) throw new IllegalArgumentException("Request cannot be null");
 
-        // ROBUSTNESS: Strip whitespace (from Office Hours pattern)
         String username = registerRequest.username().strip();
         String email = registerRequest.email().strip();
         String password = registerRequest.password();
-
-        // Optional: Enforce Domain Check (like Office Hours check for @hua.gr)
-        // if (!email.endsWith("@greenride.com")) {
-        //    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only @greenride.com emails allowed.");
-        // }
+        String phoneNumber = registerRequest.phoneNumber().strip();
 
         if (userRepository.existsByUsername(username)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Error: Username is already taken!");
@@ -55,13 +55,19 @@ public class UserServiceImpl implements UserService {
         user.setUsername(username);
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
+        user.setPhoneNumber(phoneNumber);
 
         Role userRole = roleRepository.findByName("ROLE_USER")
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error: Role not initialized."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error: Role 'ROLE_USER' not found."));
 
         user.setRoles(Set.of(userRole));
         user.setEnabled(true);
 
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+
+        // Send SMS after saving user
+        smsService.sendWelcomeSms(phoneNumber, username);
+
+        return savedUser;
     }
 }
